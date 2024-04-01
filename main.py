@@ -6,10 +6,6 @@ import multiprocessing
 import time
 from xml.etree import ElementTree 
 import datetime
-import random
-
-
-chooce = [1,2,3]
 
 config = Config('config.json')
 
@@ -19,7 +15,6 @@ username = config.parameters.username
 password = config.parameters.password
 
 vacancies = []
-all_vacancies = []
 resumes = []
 
 lock_thread = threading.RLock()
@@ -61,20 +56,6 @@ def pagination_site_page(page,data_parsing):
             for item in json.loads(site_page.content)['items'] if item['id'] not in id_vacancie ])
     lock_thread.release()
 
-def check_open_vacancy(url):
-    # print('Check vacancy',url)
-    vacancy_site = json.loads(requests.get(url,parameters).content)
-    if vacancy_site.get('type',{'id':'Not_found'})['id'] != 'open':
-        lock_thread.acquire()
-        # print('Вакансия по ссылке:',url,'перестала быть актуальной')
-        mysql.query('update hh_bot.vacancies set type=2 where url=%s',[url,])
-        lock_thread.release()
-    else:
-        lock_thread.acquire()
-        # print('Вакансия по ссылке:',url,'актуальна')
-        mysql.query('update hh_bot.vacancies set type=1 where url=%s',[url,])
-        lock_thread.release()
-
 def insert_vacancy(vacancy:Vacancy):
     # print('insert Vacancy')
     if not mysql.query('select id from hh_bot.areas where id=%s;',[vacancy.object_area.id,]):
@@ -86,18 +67,6 @@ def insert_vacancy(vacancy:Vacancy):
         mysql.query('insert into hh_bot.vacancies (id,url,name,id_area,id_company,schedule_vacancy,type) values (%s,%s,%s,%s,%s,%s,%s)',
                                                     [(vacancy.id,vacancy.url_vacancy,vacancy.name_vacancy,vacancy.object_area.id,vacancy.object_company.id,vacancy.schedule_vacancy,None),])
     
-def update_vacancy():
-    print('Start update vacancies')
-    url_vacancies = [i[0] for i in mysql.query('select url from hh_bot.vacancies')]
-    print("Check",len(url_vacancies),"vacancies")
-    for index,i in enumerate(url_vacancies):
-        t = threading.Thread(target=check_open_vacancy,
-                             args=(i,)
-                             ).start()
-        if (index+1)%5 == 0:
-            time.sleep(5)
-
-
 
 def get_resumes(user:User):
     r = user.session.get('https://vladivostok.hh.ru/applicant/resumes').text
@@ -172,8 +141,8 @@ if __name__ == '__main__':
             insert_vacancy(i)
             
 
-    subproc = multiprocessing.Process(target=update_vacancy) # вынести в отдельный файл исполнения
-    subproc.start()
+    # subproc = multiprocessing.Process(target=update_vacancy) # вынести в отдельный файл исполнения
+    # subproc.start()
 
     get_resumes(user)
     for resume in resumes:
@@ -214,5 +183,5 @@ if __name__ == '__main__':
                 print(i.accept(user,j,mysql))
                 time.sleep(4)
 
-    subproc.join()
+    # subproc.join()
     print('End programm')
