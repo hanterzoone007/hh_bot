@@ -8,6 +8,7 @@ from xml.etree import ElementTree
 import datetime
 import random
 
+
 chooce = [1,2,3]
 
 config = Config('config.json')
@@ -35,18 +36,18 @@ user.login()
 data_parasing = config.parameters.data_parsing.raw_parameters
 
 
-def pagination_site_page(page):
-    print('Page',i+1,'from',pages)
+def pagination_site_page(page,data_parsing):
+    print('Page',page+1,'from',pages)
     data_parasing['page'] = page
 
     
     site_page = requests.get('https://api.hh.ru/vacancies',
             parameters,
-            data=data_parasing)
+            data=data_parsing)
     while not site_page.text.find('items')+1:
         site_page = requests.get('https://api.hh.ru/vacancies',
             parameters,
-            data=data_parasing)
+            data=data_parsing)
     lock_thread.acquire()
     vacancies.extend([ Vacancy(item['name'],
                                 item['url'],
@@ -57,7 +58,7 @@ def pagination_site_page(page):
                                         item['employer']['name'],
                                         item['employer']['url'])
                                         ,1)
-            for item in json.loads(site_page.content)['items'] if item['id'] not in id_vacancies ])
+            for item in json.loads(site_page.content)['items'] if item['id'] not in id_vacancie ])
     lock_thread.release()
 
 def check_open_vacancy(url):
@@ -110,40 +111,59 @@ def get_resumes(user:User):
     el = ElementTree.fromstring(r[r.find('<div class="applicant-resumes-card-wrapper noprint"')-96:r.find('<div class="applicant-resumes-card-wrapper noprint"')+r[r.find('<div class="applicant-resumes-card-wrapper noprint"')-96:][1:].find('<div class="bloko-column bloko-column_xs-4 bloko-column_s-8 bloko-column_m-8 bloko-column_l-10">')+1-96])
     resumes.extend([ Resume(i.attrib['href'][8:8+38],i[0].text) for i in el.findall('div/div/h3/a')])
 
-
-
-if __name__ == '__main__':
-    print('Prepear for parsing')
-    id_vacancies = [str(i[0]) for i in mysql.query('select id from hh_bot.vacancies')]
-    rnd_int = random.choice(chooce)
-    if rnd_int == 1:
-        contries = requests.get('https://api.hh.ru/areas/countries',
-                                parameters)
-        countries = [i['id'] for i in json.loads(contries.content) if i['name']!= 'Россия']
-        
-        data_parasing['area'] = countries # process 1
-    elif rnd_int == 2:
-        data_parasing['text'] = 'python and description:удаленно' # process 2
-    elif rnd_int == 3:
-        data_parasing['schedule'] = 'remote' # process 3
-
+def start_page_parsing(data_parsing,vacan):
     print('Get start page for start parsing')
     start_page = requests.get('https://api.hh.ru/vacancies',
                 parameters,
-                data=data_parasing)
+                data=data_parsing)
     
-
+    global pages
     pages = json.loads(start_page.content)['pages']
-
+    
     print('Found',pages,'pages')
     threads = []
     for i in range(pages):
-        t = threading.Thread(target=pagination_site_page,args=(i,))
+        t = threading.Thread(target=pagination_site_page,args=(i,data_parsing,))
         t.start()
         threads.append(t)
         
     for i in threads:
         i.join()
+    vacan.extend(vacancies)
+    
+
+def process_start_page(num_process,vacan,id_vacancies):
+    
+    global id_vacancie
+    id_vacancie = id_vacancies
+    if num_process == 1:
+        contries = requests.get('https://api.hh.ru/areas/countries',
+                                parameters)
+        countries = [i['id'] for i in json.loads(contries.content) if i['name']!= 'Россия']
+        
+        data_parasing['area'] = countries # process 1
+    elif num_process == 2:
+        data_parasing['text'] = 'python and description:удаленно' # process 2
+    elif num_process == 3:
+        data_parasing['schedule'] = 'remote'
+    start_page_parsing(data_parasing,vacan)
+    
+
+
+if __name__ == '__main__':
+    print('Prepear for parsing')
+    id_vacancies = [str(i[0]) for i in mysql.query('select id from hh_bot.vacancies')]
+    vacancies_local = multiprocessing.Manager().list()
+    processes = []
+    for j in range(1,4):
+        proc_str = multiprocessing.Process(target=process_start_page,args=(j,vacancies_local,id_vacancies))
+        proc_str.start()
+        processes.append(proc_str)
+
+    for j in processes:
+        j.join()
+    
+    vacancies.extend(vacancies_local)
     # end prepear stage
     
     if len(vacancies)>0:
