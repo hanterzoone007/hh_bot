@@ -32,14 +32,16 @@ def check_open_vacancy(url):
 
 def update_vacancy():
     print('Start update vacancies')
-    url_vacancies = [i[0] for i in mysql.query('select url from hh_bot.vacancies')]
-    print("Check",len(url_vacancies),"vacancies")
-    for index,i in enumerate(url_vacancies):
-        t = threading.Thread(target=check_open_vacancy,
-                             args=(i,)
-                             ).start()
-        if (index+1)%5 == 0:
-            time.sleep(5)
+    select = mysql.query('select url from hh_bot.vacancies where now() >= timestampadd(hour,1,check_time) or check_time is Null;')
+    if select:
+        url_vacancies = [i[0] for i in mysql.query('select url from hh_bot.vacancies where now() >= timestampadd(hour,1,check_time) or check_time is Null;')]
+        print("Check",len(url_vacancies),"vacancies")
+        for index,i in enumerate(url_vacancies):
+            t = threading.Thread(target=check_open_vacancy,
+                                args=(i,)
+                                ).start()
+            if (index+1)%5 == 0:
+                time.sleep(5)
 
 if __name__ == '__main__':
     update_vacancy()

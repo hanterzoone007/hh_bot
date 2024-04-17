@@ -28,14 +28,13 @@ user = User(username,
             password)
 user.login()
 
+
 data_parasing = config.parameters.data_parsing.raw_parameters
 
 
 def pagination_site_page(page,data_parsing):
     print('Page',page+1,'from',pages)
     data_parasing['page'] = page
-
-    
     site_page = requests.get('https://api.hh.ru/vacancies',
             parameters,
             data=data_parsing)
@@ -43,6 +42,7 @@ def pagination_site_page(page,data_parsing):
         site_page = requests.get('https://api.hh.ru/vacancies',
             parameters,
             data=data_parsing)
+    
     lock_thread.acquire()
     vacancies.extend([ Vacancy(item['name'],
                                 item['url'],
@@ -90,10 +90,12 @@ def start_page_parsing(data_parsing,vacan):
     pages = json.loads(start_page.content)['pages']
     
     print('Found',pages,'pages')
+    
     threads = []
     for i in range(pages):
         t = threading.Thread(target=pagination_site_page,args=(i,data_parsing,))
         t.start()
+        time.sleep(1)
         threads.append(t)
         
     for i in threads:
@@ -117,7 +119,11 @@ def process_start_page(num_process,vacan,id_vacancies):
         data_parasing['schedule'] = 'remote'
     start_page_parsing(data_parasing,vacan)
     
-
+def check_stage(id_vacacny:int,user:User,mysql:MySql):
+    url_vacancy = 'https://hh.ru/vacancy/'+str(id_vacacny)
+    response = user.session.get(url_vacancy).text
+    response[response.find('<div class="vacancy-response__already-replied">'):response[response.find('<div class="vacancy-response__already-replied">'):].find('</div>')+7]
+    pass
 
 if __name__ == '__main__':
     print('Prepear for parsing')
