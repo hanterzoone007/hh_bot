@@ -1,3 +1,4 @@
+from ssl import SSLError
 import threading
 import time
 import requests
@@ -16,17 +17,26 @@ mysql = MySql(config.parameters.MySql.ip,
               config.parameters.MySql.password)
 mysql.connect()
 
+def responce_get(url, parameter):
+    try:
+        result = requests.get(url,parameter)
+    except Exception:
+        result = responce_get(url,parameter)
+    return result
+
 def check_open_vacancy(url):
     # print('Check vacancy',url)
-    vacancy_site = json.loads(requests.get(url,parameters).content)
+    site_responce = responce_get(url,parameters)
+    vacancy_site = json.loads(site_responce.content)
+
     if vacancy_site.get('type',{'id':'Not_found'})['id'] != 'open':
         lock_thread.acquire()
-        # print('Вакансия по ссылке:',url,'перестала быть актуальной')
+        print('Вакансия по ссылке:',url,'перестала быть актуальной')
         mysql.query('update hh_bot.vacancies set type=2 where url=%s',[url,])
         lock_thread.release()
     else:
         lock_thread.acquire()
-        # print('Вакансия по ссылке:',url,'актуальна')
+        print('Вакансия по ссылке:',url,'актуальна')
         mysql.query('update hh_bot.vacancies set type=1 where url=%s',[url,])
         lock_thread.release()
 

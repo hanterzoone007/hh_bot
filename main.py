@@ -26,7 +26,7 @@ mysql = MySql(config.parameters.MySql.ip,
 mysql.connect()
 user = User(username,
             password)
-user.login()
+
 
 
 data_parasing = config.parameters.data_parsing.raw_parameters
@@ -45,15 +45,16 @@ def pagination_site_page(page,data_parsing):
     
     lock_thread.acquire()
     vacancies.extend([ Vacancy(item['name'],
-                                item['url'],
-                                Area(item['area']['id'],item['area']['name']),
-                                item['id'],
-                                item['schedule']['name'],
-                                Company(item['employer']['id'],
-                                        item['employer']['name'],
-                                        item['employer']['url'])
-                                        ,1)
-            for item in json.loads(site_page.content)['items'] if item['id'] not in id_vacancie ])
+                                    item['url'],
+                                    Area(item['area']['id'],item['area']['name']),
+                                    item['id'],
+                                    item['schedule']['name'],
+                                    Company(item['employer']['id'],
+                                            item['employer']['name'],
+                                            item['employer']['url'])
+                                            ,1)
+                for item in json.loads(site_page.content)['items'] if item['id'] not in id_vacancie and item['employer']['trusted'] == True ] )
+   
     lock_thread.release()
 
 def insert_vacancy(vacancy:Vacancy):
@@ -65,18 +66,26 @@ def insert_vacancy(vacancy:Vacancy):
     if not mysql.query('select id from hh_bot.vacancies where id=%s;',[vacancy.id,]):
         # print('Добавленна новая вакансия')
         mysql.query('insert into hh_bot.vacancies (id,url,name,id_area,id_company,schedule_vacancy,type) values (%s,%s,%s,%s,%s,%s,%s)',
-                                                    [(vacancy.id,vacancy.url_vacancy,vacancy.name_vacancy,vacancy.object_area.id,vacancy.object_company.id,vacancy.schedule_vacancy,None),])
+                                                    [(vacancy.id,vacancy.url_vacancy,vacancy.name_vacancy,vacancy.object_area.id,vacancy.object_company.id,vacancy.schedule_vacancy,1),])
     
 
 def get_resumes(user:User):
     r = user.session.get('https://vladivostok.hh.ru/applicant/resumes').text
-    
-    while r.find('<div class="applicant-resumes-card-wrapper noprint"')<0:
-        r = user.session.get('https://vladivostok.hh.ru/applicant/resumes').text
+    n = 0
     open('index.html',
          'w',
          encoding='utf-8'
          ).write(r)
+    while r.find('<div class="applicant-resumes-card-wrapper noprint"')<0:
+        r = user.session.get('https://vladivostok.hh.ru/applicant/resumes').text
+        if n==10:
+            exit()
+        n+=1
+    open('index.html',
+         'w',
+         encoding='utf-8'
+         ).write(r)
+        
     el = ElementTree.fromstring(r[r.find('<div class="applicant-resumes-card-wrapper noprint"')-96:r.find('<div class="applicant-resumes-card-wrapper noprint"')+r[r.find('<div class="applicant-resumes-card-wrapper noprint"')-96:][1:].find('<div class="bloko-column bloko-column_xs-4 bloko-column_s-8 bloko-column_m-8 bloko-column_l-10">')+1-96])
     resumes.extend([ Resume(i.attrib['href'][8:8+38],i[0].text) for i in el.findall('div/div/h3/a')])
 
@@ -122,7 +131,7 @@ def process_start_page(num_process,vacan,id_vacancies):
 def check_stage(id_vacacny:int,user:User,mysql:MySql):
     url_vacancy = 'https://hh.ru/vacancy/'+str(id_vacacny)
     response = user.session.get(url_vacancy).text
-    response[response.find('<div class="vacancy-response__already-replied">'):response[response.find('<div class="vacancy-response__already-replied">'):].find('</div>')+7]
+    text = response[response.find('<div class="vacancy-response__already-replied">'):response[response.find('<div class="vacancy-response__already-replied">'):].find('</div>')+7]
     pass
 
 if __name__ == '__main__':
@@ -149,7 +158,7 @@ if __name__ == '__main__':
 
     # subproc = multiprocessing.Process(target=update_vacancy) # вынести в отдельный файл исполнения
     # subproc.start()
-
+    user.login()
     get_resumes(user)
     for resume in resumes:
         print('Check time',resume.name)

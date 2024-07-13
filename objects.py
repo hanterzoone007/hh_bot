@@ -4,6 +4,8 @@ import json
 import datetime
 import random
 from typing import Any
+import os
+import time as tm
 
 class MySql:
 
@@ -49,11 +51,52 @@ class User:
         return self.__password
 
     def login(self):
+        # try:
+        #     file = open('cookies.json','r',encoding='utf-8')
+        #     for i in json.loads(file.read()):
+        #         if self.session.cookies.get(i[0]):
+        #             self.session.cookies[i[0]] = i[1]
+        #         else:
+        #             self.session.cookies.set(i[0],i[1])
+
+                
+        #     return True
+        # except FileNotFoundError:
         data = {'_xsrf':self.session.cookies.get('_xsrf'),
                 'username':self.username,
                 'password':self.password,
                 'accountType':'APPLICANT'}
-        self.session.post("https://hh.ru/account/login?backurl=%2%",data=data)
+        check = self.session.post("https://hh.ru/account/login?backurl=%2%",data=data)
+        # print(check.status_code)
+        # print(check.text)
+        # if check.status_code == 200:
+            # print('User Loginning')
+            # return True
+        # self.session.post("https://hh.ru/account/login?backurl=%2%",data=data)
+        if json.loads(check.text)['hhcaptcha']['isBot'] == True:
+            if os.path.isfile('./cookies.json') and os.stat('./cookies.json').st_birthtime > tm.time() - 1 * 86400:
+                file = open('cookies.json','r',encoding='utf-8')
+                for i in json.loads(file.read()):
+                    self.session.cookies.set(i[0],i[1])
+                return True
+            os.remove('./cookies.json')
+            key = json.loads(self.session.post("https://hh.ru/captcha?lang=RU").text)['key']
+            r = self.session.get("https://hh.ru/captcha/picture",params={'key':key},stream=True)
+            with open('i.png','wb') as f:
+                for chunk in r:
+                    f.write(chunk)
+            captcha_text = input('Input chaptcha text (i.png): ')
+            data['captchaText'] = captcha_text
+            data['captchaKey'] = key
+            data['captchaState'] = json.loads(check.text)['hhcaptcha']['captchaState']
+            self.session.post("https://hh.ru/account/login?backurl=%2%",data=data).text
+            del data['captchaText']
+            del data['captchaKey']
+            del data['captchaState']
+        open('cookies.json','w',encoding='utf-8').write(json.dumps(self.session.cookies.items()))
+        
+        return True
+
         
 
 class Base:
@@ -86,12 +129,13 @@ class Resume(Base):
         result = user.session.post('https://vladivostok.hh.ru/applicant/resumes/touch',
                                    data={'_xsrf':user.session.cookies.get('_xsrf'),
                                          'resume': self.id,
-                                         'undirectable': True }).status_code
-        if result == 200:
+                                         'undirectable': True })
+        if result.status_code == 200:
             print('Success update resume',self.name)
             return time_update
         else:
             print('Error update')
+            print(result.text)
             return False
 
 class Area(Base):
@@ -127,48 +171,27 @@ class Vacancy(Base):
         return self.__dict__
     
     def accept(self, user:User,resume:Resume,mysql:MySql):
-        cover_letter = [f'''Уважаемый рекрутер,
+        cover_letter = [f'''Здравствуйте,
 
-Я обращаюсь к вам, чтобы выразить свой интерес к вакансии {self.name_vacancy}. Мое разностороннее профессиональное образование и опыт работы позволяют мне принести дополнительную ценность в вашу компанию. Я готов показать, как мои уникальные навыки могут быть полезны для вашей команды на практике.
+Меня заинтересовала ваша вакансия "{self.name_vacancy}"
 
-Буду рад обсудить возможность встречи и предоставить дополнительную информацию о себе. С нетерпением жду возможности поближе познакомиться с вашей компанией.
+Так как я знаком с вашим стеком технологий и некоторые из них использовал в своих проектах, считаю, что я буду подходящим кандидатом. 
 
-С уважением,
-Владислав Динкилакер
+Я стремлюсь к постоянному саморазвитию и улучшению своих профессиональных навыков, готов к новым вызовам.''',
+f'''Здравствуйте,
 
-'''+'Отправленно с помощью бота, подробности по почте в резюме',
-f'''Уважаемый рекрутер,
+Меня заинтересовала ваша вакансия "{self.name_vacancy}". Так как я знаком с вашим стеком технологий и некоторые из них использовал в своих проектах, считаю, что я буду подходящим кандидатом.
 
-Здравствуйте! Я заинтересован в возможности присоединиться к вашей компании в качестве {self.name_vacancy}. Мой опыт работы и профессиональные навыки позволяют мне быть ценным участником вашей команды. Буду рад предоставить дополнительную информацию о себе и обсудить возможное сотрудничество.
+Я стремлюсь к постоянному саморазвитию и улучшению своих профессиональных навыков, готов к новым вызовам. Ваша компания представляет для меня отличную возможность внести свой вклад и развиваться в инновационной среде.
 
-С уважением,
-Владислав Динкилакер
+Буду признателен за возможность обсудить детали вакансии и моего потенциального вклада в вашу команду.''',
+f'''Здравствуйте,
 
-'''+'Отправленно с помощью бота, подробности по почте в резюме',
-f'''Уважаемый рекрутер,
+Хотел бы выразить свой интерес к вашей вакансии "{self.name_vacancy}". Работа в вашей компании представляется мне отличной возможностью для профессионального и личностного роста.
 
-Я заинтересован в возможности присоединиться к вашей компании в качестве {self.name_vacancy}. Мой опыт работы и профессиональные навыки позволяют мне эффективно выполнять поставленные задачи. Буду рад предоставить дополнительную информацию о себе и ответить на ваши вопросы.
+Считаю, что мой опыт работы с вашим технологическим стеком и стремление к постоянному самосовершенствованию делают меня подходящим кандидатом для этой позиции.
 
-С уважением,
-Владислав Динкилакер
-
-'''+'Отправленно с помощью бота, подробности по почте в резюме',
-f'''Уважаемый рекрутер,
-
-Я заинтересован в возможности присоединиться к вашей компании в качестве {self.name_vacancy}. Моя целеустремленность и профессиональные навыки позволяют мне быть ценным участником вашей команды. Готов обсудить возможность встречи и предоставить дополнительную информацию о своем опыте.
-
-С уважением,
-Владислав Динкилакер
-
-'''+'Отправленно с помощью бота, подробности по почте в резюме',
-f'''Уважаемый рекрутер,
-
-Я обращаюсь к вам с просьбой рассмотреть меня на позицию {self.name_vacancy} в вашей компании. Я уверен, что мой опыт и навыки позволят мне эффективно внести вклад в работу вашей команды. Буду рад ответить на ваши вопросы и предоставить дополнительную информацию о себе.
-
-С уважением,
-Владислав Динкилакер
-
-'''+'Отправленно с помощью бота, подробности по почте в резюме']
+Буду рад обсудить детали вакансии и моего потенциального вклада в вашу команду.''']
         accept_vacancy_params ={
         '_xsrf': user.session.cookies.get('_xsrf'),
         'vacancy_id': self.id,

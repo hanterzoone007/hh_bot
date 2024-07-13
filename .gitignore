@@ -9,3 +9,6 @@ ts*
 functions.py
 controller.py
 global_var*
+*.bat
+*.png
+*.img
